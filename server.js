@@ -10,10 +10,10 @@ const app = express();
 // Enable JSON body parsing
 app.use(express.json());
 
-// CORS setup for dev + prod
+// CORS setup
 app.use(
   cors({
-    origin: ["https://www.trippyhippie.store", "http://localhost:5173"], 
+    origin: ["https://www.trippyhippie.store", "http://localhost:5173"],
     methods: ["POST", "GET"],
     credentials: true,
   })
@@ -25,18 +25,14 @@ const NRS_DBA_ID = process.env.NRSPAY_DBA_ID?.trim();
 const NRS_TERMINAL_ID = process.env.NRSPAY_TERMINAL_ID?.trim();
 const CLIENT_URL = process.env.CLIENT_URL?.trim() || "http://localhost:5173";
 
-// Log credentials safely
-console.log("Loaded NRS credentials:", {
-  hasDbaId: !!NRS_DBA_ID,
-  hasTerminalId: !!NRS_TERMINAL_ID,
-  hasToken: !!NRS_TOKEN,
-});
-
 // Health check
 app.get("/", (req, res) => res.send("Backend is live"));
 
+// --- Fix: register router for API ---
+const apiRouter = express.Router();
+
 // NRS Pay endpoint
-app.post("/api/nrs/create-payment", async (req, res) => {
+apiRouter.post("/nrs/create-payment", async (req, res) => {
   try {
     const { cart = [], shipping = {}, total = 0, externalId } = req.body;
 
@@ -49,9 +45,6 @@ app.post("/api/nrs/create-payment", async (req, res) => {
     const { email, fullName, street, city, state, zip, phone } = shipping;
     if (!email || !fullName || !street || !city || !state || !zip)
       return res.status(400).json({ error: "Shipping information is incomplete." });
-
-    if (!total || total <= 0)
-      return res.status(400).json({ error: "Invalid total amount." });
 
     const normalizedPhone = phone ? `+1${phone.replace(/\D/g, "")}` : "";
 
@@ -105,6 +98,9 @@ app.post("/api/nrs/create-payment", async (req, res) => {
   }
 });
 
-// Listen on PORT (Render or fallback)
+// Mount API router
+app.use("/api", apiRouter);
+
+// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

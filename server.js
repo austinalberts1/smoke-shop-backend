@@ -6,18 +6,34 @@ import fetch from "node-fetch";
 dotenv.config();
 const app = express();
 app.use(express.json());
+
+// Fixed CORS: Allow your frontend + handle preflight
 app.use(cors({
   origin: ["https://www.trippyhippie.store", "http://localhost:5173"],
   methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 }));
 
+// Force preflight response
+app.options("*", (req, res) => {
+  res.set("Access-Control-Allow-Origin", "https://www.trippyhippie.store");
+  res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.sendStatus(200);
+});
+
+// Root route to confirm server is alive
+app.get("/", (req, res) => {
+  res.send("Backend is live! CORS working for trippyhippie.store");
+});
+
+// Payment route
 const NRS_TOKEN = process.env.NRSPAY_TOKEN?.trim();
 const NRS_DBA_ID = process.env.NRSPAY_DBA_ID?.trim();
 const NRS_TERMINAL_ID = process.env.NRSPAY_TERMINAL_ID?.trim();
 const CLIENT_URL = process.env.CLIENT_URL?.trim() || "http://localhost:5173";
 
-app.options("/api/nrs/create-payment", cors());
 app.post("/api/nrs/create-payment", async (req, res) => {
   const { cart = [], shipping = {}, total = 0 } = req.body;
   if (!Array.isArray(cart) || cart.length === 0)
@@ -64,4 +80,7 @@ app.post("/api/nrs/create-payment", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Root: https://9fd5e415-d90c-4684-9c68-bcc6cca8f37d-00-1cq66bpdg4u4u.picard.replit.dev/`);
+});

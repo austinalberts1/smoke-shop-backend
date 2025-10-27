@@ -9,11 +9,12 @@ const app = express();
 
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: ["https://www.trippyhippie.store", "http://localhost:5173"], 
     methods: ["POST", "GET"],
     credentials: true,
   })
 );
+
 
 app.use(express.json());
 
@@ -122,5 +123,6 @@ app.post("/api/nrs/create-payment", async (req, res) => {
     res.status(500).json({ error: "Payment creation failed. Please try again or contact support." });
   }
 });
+
 
 app.listen(3000, () => console.log("Server running on http://localhost:3000"));

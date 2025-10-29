@@ -1,5 +1,4 @@
 // server.js
-
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -31,7 +30,7 @@ console.log("Loaded NRS credentials:", {
 });
 
 // Route to create Hosted Fields Token
-app.post("/api/nrs/create-token", async (req, res) => {
+app Post("/api/nrs/create-token", async (req, res) => {
   try {
     const { amount, externalId } = req.body;
 
@@ -43,19 +42,17 @@ app.post("/api/nrs/create-token", async (req, res) => {
     }
 
     if (!amount || amount <= 0) {
-      console.error("Invalid amount:", amount);
       return res.status(400).json({ error: "Invalid payment amount." });
     }
 
     const domain = process.env.VITE_CLIENT_URL || "http://localhost:5173";
 
-    // NRSPay Hosted Fields Token request body
     const requestBody = {
       terminal: Number(NRS_TERMINAL_ID),
-      domain: domain,
-      expiration: 15, // token expires in 15 minutes
-      saveCard: "disabled", // options: required, optional, disabled
-      "3ds": false, // enable 3DS verification if terminal supports
+      domain,
+      expiration: 15,
+      saveCard: "disabled",
+      "3ds": false,
     };
 
     const response = await fetch(
@@ -82,6 +79,52 @@ app.post("/api/nrs/create-token", async (req, res) => {
     res.json({ token: data.access_token });
   } catch (err) {
     console.error("Error in /create-token", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ---- ADD THIS AFTER the /create-token route ----
+app.post("/api/nrs/pay", async (req, res) => {
+  try {
+    const { hostedFieldsToken, amount, externalId, order } = req.body;
+
+    if (!NRS_TOKEN || !NRS_TERMINAL_ID) {
+      return res.status(500).json({ error: "Gateway mis-configured" });
+    }
+
+    const payload = {
+      terminal: { id: Number(NRS_TERMINAL_ID) },
+      amount: Number(amount).toFixed(2),
+      source: "Internet",
+      level: 1,
+      threeds: { id: null },
+      card: { token: hostedFieldsToken },
+      externalId: externalId ?? null,
+      order: order ?? null,
+    };
+
+    const resp = await fetch(
+      "https://gateway.nrspaydashboard.com/payment/sale",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${NRS_TOKEN}`,
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      console.error("NRSPay sale error", data);
+      return res.status(resp.status).json(data);
+    }
+
+    res.json(data);
+  } catch (err) {
+    console.error("pay endpoint error", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

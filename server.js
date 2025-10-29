@@ -18,7 +18,6 @@ app.use(
 
 app.use(express.json());
 
-// Load NRS credentials from environment variables
 const NRS_TOKEN = process.env.NRSPAY_API_TOKEN?.trim();
 const NRS_DBA_ID = process.env.VITE_NRSPAY_DBA_ID?.trim();
 const NRS_TERMINAL_ID = process.env.VITE_NRSPAY_TERMINAL_ID?.trim();
@@ -29,19 +28,15 @@ console.log("Loaded NRS credentials:", {
   hasToken: !!NRS_TOKEN,
 });
 
-// Route to create Hosted Fields Token
-app Post("/api/nrs/create-token", async (req, res) => {
+app.post("/api/nrs/create-token", async (req, res) => {
   try {
     const { amount, externalId } = req.body;
-
     if (!NRS_TOKEN || !NRS_DBA_ID || !NRS_TERMINAL_ID) {
       console.error("Missing NRS credentials");
-      return res
-        .status(500)
-        .json({ error: "Payment service configuration error" });
+      return res.status(500).json({ error: "Payment service configuration error" });
     }
 
-    if (!amount || amount <= 0) {
+    if (!amount || Number(amount) <= 0) {
       return res.status(400).json({ error: "Invalid payment amount." });
     }
 
@@ -55,25 +50,20 @@ app Post("/api/nrs/create-token", async (req, res) => {
       "3ds": false,
     };
 
-    const response = await fetch(
-      "https://nrspaydashboard.com/api/hosted-fields/token",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${NRS_TOKEN}`,
-        },
-        body: JSON.stringify(requestBody),
-      }
-    );
+    const response = await fetch("https://nrspaydashboard.com/api/hosted-fields/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${NRS_TOKEN}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
 
     const data = await response.json();
 
     if (!response.ok || !data.access_token) {
       console.error("Token creation error", data);
-      return res
-        .status(response.status)
-        .json({ error: data.message || "Failed to create token" });
+      return res.status(response.status || 500).json({ error: data.message || "Failed to create token" });
     }
 
     res.json({ token: data.access_token });
@@ -83,11 +73,9 @@ app Post("/api/nrs/create-token", async (req, res) => {
   }
 });
 
-// ---- ADD THIS AFTER the /create-token route ----
 app.post("/api/nrs/pay", async (req, res) => {
   try {
     const { hostedFieldsToken, amount, externalId, order } = req.body;
-
     if (!NRS_TOKEN || !NRS_TERMINAL_ID) {
       return res.status(500).json({ error: "Gateway mis-configured" });
     }
@@ -103,23 +91,20 @@ app.post("/api/nrs/pay", async (req, res) => {
       order: order ?? null,
     };
 
-    const resp = await fetch(
-      "https://gateway.nrspaydashboard.com/payment/sale",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${NRS_TOKEN}`,
-        },
-        body: JSON.stringify(payload),
-      }
-    );
+    const resp = await fetch("https://gateway.nrspaydashboard.com/payment/sale", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${NRS_TOKEN}`,
+      },
+      body: JSON.stringify(payload),
+    });
 
     const data = await resp.json();
 
     if (!resp.ok) {
       console.error("NRSPay sale error", data);
-      return res.status(resp.status).json(data);
+      return res.status(resp.status || 500).json(data);
     }
 
     res.json(data);
@@ -129,4 +114,5 @@ app.post("/api/nrs/pay", async (req, res) => {
   }
 });
 
-app.listen(3000, () => console.log("Server running on http://localhost:3000"));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

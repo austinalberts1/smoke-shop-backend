@@ -1,86 +1,81 @@
+// server.js
+
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import fetch from "node-fetch";
 
 dotenv.config();
+
 const app = express();
+
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    methods: ["POST", "GET"],
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 
-// Fixed CORS: Allow your frontend + handle preflight
-app.use(cors({
-  origin: ["https://www.trippyhippie.store", "http://localhost:5173"],
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
-}));
-
-// Force preflight response
-app.options("*", (req, res) => {
-  res.set("Access-Control-Allow-Origin", "https://www.trippyhippie.store");
-  res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Content-Type");
-  res.sendStatus(200);
-});
-
-// Root route to confirm server is alive
-app.get("/", (req, res) => {
-  res.send("Backend is live! CORS working for trippyhippie.store");
-});
-
-// Payment route
 const NRS_TOKEN = process.env.NRSPAY_TOKEN?.trim();
 const NRS_DBA_ID = process.env.NRSPAY_DBA_ID?.trim();
 const NRS_TERMINAL_ID = process.env.NRSPAY_TERMINAL_ID?.trim();
-const CLIENT_URL = process.env.CLIENT_URL?.trim() || "http://localhost:5173";
 
-app.post("/api/nrs/create-payment", async (req, res) => {
-  const { cart = [], shipping = {}, total = 0 } = req.body;
-  if (!Array.isArray(cart) || cart.length === 0)
-    return res.status(400).json({ error: "Cart is empty or invalid." });
-  if (!NRS_TOKEN || !NRS_DBA_ID || !NRS_TERMINAL_ID)
-    return res.status(500).json({ error: "Payment service configuration error." });
+console.log("Loaded NRS credentials:", {
+  hasDbaId: !!NRS_DBA_ID,
+  hasTerminalId: !!NRS_TERMINAL_ID,
+  hasToken: !!NRS_TOKEN,
+});
 
-  const { email, fullName, street, city, state, zip, phone } = shipping;
-  if (!email || !fullName || !street || !city || !state || !zip)
-    return res.status(400).json({ error: "Shipping information is incomplete." });
-
-  const normalizedPhone = phone ? `+1${phone.replace(/\D/g, "")}` : "";
+app.post("/api/nrs/create-token", async (req, res) => {
   try {
-    const nrspayRes = await fetch("https://gateway.nrspaydashboard.com/api/gateway/hosted-form", {
+    const { amount, externalId } = req.body;
+
+    if (!NRS_TOKEN || !NRS_DBA_ID || !NRS_TERMINAL_ID) {
+      console.error("Missing NRS credentials");
+      return res.status(500).json({ error: "Payment service configuration error" });
+    }
+
+    if (!amount || amount <= 0) {
+      console.error("Invalid amount:", amount);
+      return res.status(400).json({ error: "Invalid payment amount." });
+    }
+
+    const domain = process.env.CLIENT_URL || "http://localhost:5173";
+
+    const requestBody = {
+      terminal: { id: Number(NRS_TERMINAL_ID) },
+      dba: { id: Number(NRS_DBA_ID) },
+      amount: parseFloat(amount).toFixed(2),
+      expiration: 15,
+      externalId: externalId || `ORDER-${Date.now()}`,
+      origin: "WEB",
+      domain
+    };
+
+    const response = await fetch("https://gateway.nrspaydashboard.com/api/hosted-fields/token", {
       method: "POST",
-      headers: { Authorization: `Bearer ${NRS_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        dba: { id: NRS_DBA_ID },
-        terminal: { id: NRS_TERMINAL_ID },
-        threeds: "Disabled",
-        amount: parseFloat(total).toFixed(2),
-        externalId: `ORDER-${Date.now()}`,
-        origin: "WEB",
-        returnUrl: `${CLIENT_URL}/checkout-success`,
-        cancelUrl: `${CLIENT_URL}/checkout-cancel`,
-        returnUrlNavigation: "top",
-        useLogo: "Yes",
-        requestBillingInfo: "Yes",
-        requestContactInfo: "Yes",
-        sendReceipt: "Yes",
-        billingInfo: { country: "United States", address: street, city, state, zip: String(zip) },
-        contactInfo: { name: fullName, email, phone: normalizedPhone },
-        order: { description: "Trippy Hippie Order", items: cart.map(i => ({ sku: String(i.id), description: i.name, quantity: parseInt(i.quantity), price: parseFloat(i.price).toFixed(2) })) }
-      }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${NRS_TOKEN}`,
+      },
+      body: JSON.stringify(requestBody),
     });
 
-    const result = await nrspayRes.json();
-    if (!nrspayRes.ok) return res.status(nrspayRes.status).json({ error: result.message || "Failed to create payment session" });
-    res.json({ code: result.code, url: result.url });
+    const data = await response.json();
+
+    if (!response.ok || !data.token) {
+      console.error("Token creation error", data);
+      return res.status(response.status).json({ error: data.message || "Failed to create token" });
+    }
+
+    res.json({ token: data.token });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Payment creation failed" });
+    console.error("Error in /create-token", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Root: https://9fd5e415-d90c-4684-9c68-bcc6cca8f37d-00-1cq66bpdg4u4u.picard.replit.dev/`);
-});
+app.listen(3000, () => console.log("Server running on http://localhost:3000"));

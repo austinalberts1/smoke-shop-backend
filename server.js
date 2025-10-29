@@ -11,11 +11,12 @@ const app = express();
 
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    methods: ["POST", "GET"],
-    credentials: true,
+    origin: 'https://www.trippyhippie.store',
+    methods: ['POST', 'GET'],
+    credentials: true
   })
 );
+
 
 app.use(express.json());
 
@@ -79,3 +80,4 @@ app.post("/api/nrs/create-token", async (req, res) => {
 });
 
 app.listen(3000, () => console.log("Server running on http://localhost:3000"));
+
